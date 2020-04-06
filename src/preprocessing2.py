@@ -1,9 +1,13 @@
 import pandas as pd
 import numpy as np
+import category_encoders as ce
+import scipy.stats as stats
+from dateutil.parser import parse
+from sklearn.model_selection import train_test_split
+from src.analysis import get_whiskers, calc_recon_age
+    
 
 def split_data(df):
-    from sklearn.model_selection import train_test_split
-    
     df_sorted = df.sort_values(by='date')
     X = df_sorted.loc[:, df_sorted.columns != 'price']
     y = df_sorted['price']
@@ -13,6 +17,23 @@ def split_data(df):
     X_valid, X_test, y_valid, y_test = train_test_split(X_test, y_test, test_size=0.33, shuffle=False)
 
     return X_train, X_valid, X_test, y_train, y_valid, y_test
+
+def encode_zipcode(df):
+    encoder = ce.binary.BinaryEncoder(cols=['zipcode'])
+    new_zipcode = encoder.fit_transform(df_try['zipcode'])
+    
+    return new
+
+def get_values_for_replacement(column, method='5-95perc'):
+    if method == '5-95perc':
+        value1 = column.quantile(0.05)
+        value2 = column.quantile(0.95)
+    elif method == 'mean':
+        value1 = value2 = column.mean()
+    elif method == 'med':
+        value1 = value2 = column.median()
+        
+    return value1, value2
 
 
 def replace_outliers(value, l_whisker, r_whisker, quantile_05, quantile_95):
@@ -26,9 +47,7 @@ def replace_outliers(value, l_whisker, r_whisker, quantile_05, quantile_95):
     return new_value
 
 
-def boxcox_normalize(col_train, col_valid, col_test):
-    from src.analysis import get_whiskers
-    import scipy.stats as stats
+def boxcox_normalize(col_train, col_valid, col_test, repl_method='5-95perc'):
     
     col_train_norm, att = stats.boxcox(col_train)
     col_valid_norm = stats.boxcox(col_valid, att)
@@ -38,13 +57,27 @@ def boxcox_normalize(col_train, col_valid, col_test):
     col_valid_norm = pd.Series(col_valid_norm)
     col_test_norm = pd.Series(col_test_norm)
     
+    value1, value2 = get_values_for_replacement(col_train_norm, repl_method)
     l_whisker, r_whisker = get_whiskers(col_train_norm)
-    train_05 = col_train_norm.quantile(0.05)
-    train_95 = col_train_norm.quantile(0.95)
     
-    col_train = col_train_norm.apply(replace_outliers, args=(l_whisker, r_whisker, train_05, train_95))
-    col_valid = col_valid_norm.apply(replace_outliers, args=(l_whisker, r_whisker, train_05, train_95))
-    col_test = col_test_norm.apply(replace_outliers, args=(l_whisker, r_whisker, train_05, train_95))
+    col_train = col_train_norm.apply(replace_outliers, args=(l_whisker, r_whisker, value1, value2))
+    col_valid = col_valid_norm.apply(replace_outliers, args=(l_whisker, r_whisker, value1, value2))
+    col_test = col_test_norm.apply(replace_outliers, args=(l_whisker, r_whisker, value1, value2))
+
+    return np.array(col_train), np.array(col_valid), np.array(col_test)
+
+
+def normalize(func, col_train, col_valid, col_test, repl_method='5-95perc'):
+    col_train_norm = pd.Series(func(col_train))
+    col_valid_norm = pd.Series(func(col_valid))
+    col_test_norm = pd.Series(func(col_test))
+   
+    value1, value2 = get_values_for_replacement(col_train_norm, repl_method)
+    l_whisker, r_whisker = get_whiskers(col_train_norm)
+    
+    col_train = col_train_norm.apply(replace_outliers, args=(l_whisker, r_whisker, value1, value2))
+    col_valid = col_valid_norm.apply(replace_outliers, args=(l_whisker, r_whisker, value1, value2))
+    col_test = col_test_norm.apply(replace_outliers, args=(l_whisker, r_whisker, value1, value2))
 
     return np.array(col_train), np.array(col_valid), np.array(col_test)
 
@@ -61,9 +94,20 @@ def remove_rows(df):
     return df
 
 
+def create_recon_age_col(df):
+    df["date"] = df["date"].apply(lambda x: parse(x, dayfirst=False))
+    df["date"] = pd.to_datetime(df["date"], infer_datetime_format=True)
+    df['recon_age'] = df[['yr_renovated', 'yr_built', 'date']].apply(lambda x: calc_recon_age(x['yr_renovated'], x['yr_built'], x['date'].year), axis=1)
+    
+    return df['recon_age']
+    
+
 def run_pipeline(df):
+    
     df = replace_bedrooms_number(33, 3, df)
     df = remove_rows(df)
+    df['recon_age'] = create_recon_age_col(df)
+    
     X_train, X_valid, X_test, y_train, y_valid, y_test = split_data(df)
     
     #normalize price
@@ -74,6 +118,26 @@ def run_pipeline(df):
     X_train['sqft_living'] = normalized[0]
     X_valid['sqft_living'] = normalized[1]
     X_test['sqft_living'] = normalized[2]
+    
+    #normalize sqft_lot
+    normalized = boxcox_normalize(X_train['sqft_lot'], X_valid['sqft_lot'], X_test['sqft_lot'], repl_method='med')
+    X_train['sqft_lot'] = normalized[0]
+    X_valid['sqft_lot'] = normalized[1]
+    X_test['sqft_lot'] = normalized[2]
+    
+    
+    #normalize sqft_above
+    X_train['sqft_above'], X_valid['sqft_above'], X_test['sqft_above'] = boxcox_normalize(X_train['sqft_above'], X_valid['sqft_above'], X_test['sqft_above'])
+    
+    #normalize sqft_basement
+    X_train['sqft_basement'], X_valid['sqft_basement'], X_test['sqft_basement'] = normalize(np.sqrt, X_train['sqft_basement'], X_valid['sqft_basement'], X_test['sqft_basement'], repl_method='mean')
+    
+    #normalize sqft_living15
+    X_train['sqft_living15'], X_valid['sqft_living15'], X_test['sqft_living15'] = normalize(np.log, X_train['sqft_living15'], X_valid['sqft_living15'], X_test['sqft_living15'])
+    
+    #normalize sqft_lot15
+    X_train['sqft_lot15'], X_valid['sqft_lot15'], X_test['sqft_lot15'] = boxcox_normalize(X_train['sqft_lot15'], X_valid['sqft_lot15'], X_test['sqft_lot15'], repl_method='med')
+    
     
     return X_train, X_valid, X_test, y_train, y_valid, y_test
 

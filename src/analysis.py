@@ -22,3 +22,9 @@ def get_whiskers(column):
     whisker_l = np.max([descr['min'], descr['25%'] - (1.5 * IQR)])
     
     return whisker_l, whisker_r
+
+def calc_recon_age(yr_renovated, yr_built, yr_sold):
+    if yr_renovated > 0:
+        return yr_sold - yr_renovated
+    else:
+        return yr_sold - yr_built
