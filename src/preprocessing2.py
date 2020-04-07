@@ -66,7 +66,7 @@ def boxcox_normalize(col_train, col_valid, col_test, repl_method='5-95perc'):
     col_valid = col_valid_norm.apply(replace_outliers, args=(l_whisker, r_whisker, value1, value2))
     col_test = col_test_norm.apply(replace_outliers, args=(l_whisker, r_whisker, value1, value2))
 
-    return np.array(col_train), np.array(col_valid), np.array(col_test)
+    return np.array(col_train), np.array(col_valid), np.array(col_test), att
 
 
 def normalize(func, col_train, col_valid, col_test, repl_method='5-95perc'):
@@ -114,7 +114,7 @@ def run_pipeline(df):
     X_train, X_valid, X_test, y_train, y_valid, y_test = split_data(df)
     
     #normalize price
-    y_train, y_valid, y_test = boxcox_normalize(y_train, y_valid, y_test)
+    y_train, y_valid, y_test, price_lambda = boxcox_normalize(y_train, y_valid, y_test)
     
     #normalize sqft_living
     normalized = boxcox_normalize(X_train['sqft_living'], X_valid['sqft_living'], X_test['sqft_living'])
@@ -128,9 +128,11 @@ def run_pipeline(df):
     X_valid['sqft_lot'] = normalized[1]
     X_test['sqft_lot'] = normalized[2]
     
-    
     #normalize sqft_above
-    X_train['sqft_above'], X_valid['sqft_above'], X_test['sqft_above'] = boxcox_normalize(X_train['sqft_above'], X_valid['sqft_above'], X_test['sqft_above'])
+    normalized = boxcox_normalize(X_train['sqft_above'], X_valid['sqft_above'], X_test['sqft_above'])
+    X_train['sqft_above'] = normalized[0]
+    X_valid['sqft_above'] = normalized[1]
+    X_test['sqft_above'] = normalized[2]
     
     #normalize sqft_basement
     X_train['sqft_basement'], X_valid['sqft_basement'], X_test['sqft_basement'] = normalize(np.sqrt, X_train['sqft_basement'], X_valid['sqft_basement'], X_test['sqft_basement'], repl_method='mean')
@@ -139,10 +141,12 @@ def run_pipeline(df):
     X_train['sqft_living15'], X_valid['sqft_living15'], X_test['sqft_living15'] = normalize(np.log, X_train['sqft_living15'], X_valid['sqft_living15'], X_test['sqft_living15'])
     
     #normalize sqft_lot15
-    X_train['sqft_lot15'], X_valid['sqft_lot15'], X_test['sqft_lot15'] = boxcox_normalize(X_train['sqft_lot15'], X_valid['sqft_lot15'], X_test['sqft_lot15'], repl_method='med')
+    normalized = boxcox_normalize(X_train['sqft_lot15'], X_valid['sqft_lot15'], X_test['sqft_lot15'], repl_method='med')
+    X_train['sqft_lot15'] = normalized[0]
+    X_valid['sqft_lot15'] = normalized[1]
+    X_test['sqft_lot15'] = normalized[2]
     
-    
-    return X_train, X_valid, X_test, y_train, y_valid, y_test
+    return X_train, X_valid, X_test, y_train, y_valid, y_test, price_lambda
 
 
 
