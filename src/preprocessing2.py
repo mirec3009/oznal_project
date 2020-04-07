@@ -18,11 +18,13 @@ def split_data(df):
 
     return X_train, X_valid, X_test, y_train, y_valid, y_test
 
+
 def encode_zipcode(df):
     encoder = ce.binary.BinaryEncoder(cols=['zipcode'])
-    new_zipcode = encoder.fit_transform(df_try['zipcode'])
+    df_encoded = encoder.fit_transform(df)
     
-    return new
+    return df_encoded
+
 
 def get_values_for_replacement(column, method='5-95perc'):
     if method == '5-95perc':
@@ -107,6 +109,7 @@ def run_pipeline(df):
     df = replace_bedrooms_number(33, 3, df)
     df = remove_rows(df)
     df['recon_age'] = create_recon_age_col(df)
+    df = encode_zipcode(df)
     
     X_train, X_valid, X_test, y_train, y_valid, y_test = split_data(df)
     
