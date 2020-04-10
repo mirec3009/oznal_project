@@ -5,7 +5,29 @@ import scipy.stats as stats
 from dateutil.parser import parse
 from sklearn.model_selection import train_test_split
 from src.analysis import get_whiskers, calc_recon_age
+import statsmodels.api as sm
+from mlxtend.feature_selection import SequentialFeatureSelector as SFS
+
+
+def create_price_per_sqft_column(X_train, X_valid, X_test, y_train):
+    X_train['price_per_sqft'] = y_train / (X_train['sqft_living'] + X_train['sqft_basement'])
+    median = X_train['price_per_sqft'].median()
+    X_train['price_per_sqft'] = X_train.groupby('zipcode')['price_per_sqft'].transform(lambda x: x.median())
     
+    d = {}
+    for _, x_train in X_train.iterrows():
+        d.update({x_train['zipcode']:x_train['price_per_sqft']})
+        
+    X_valid['price_per_sqft'] = median
+    for indice, x_valid in X_valid.iterrows():
+        X_valid.loc[X_valid.index == indice ,'price_per_sqft'] = d[x_valid['zipcode']]
+        
+    X_test['price_per_sqft'] = median
+    for indice, x_test in X_test.iterrows():
+        X_test.loc[X_test.index == indice ,'price_per_sqft'] = d[x_test['zipcode']]    
+        
+    return X_train, X_valid, X_test
+
 
 def split_data(df):
     df_sorted = df.sort_values(by='date')
@@ -19,11 +41,17 @@ def split_data(df):
     return X_train, X_valid, X_test, y_train, y_valid, y_test
 
 
-def encode_zipcode(df):
+def encode_zipcode(X_train, X_valid, X_test):
     encoder = ce.binary.BinaryEncoder(cols=['zipcode'])
-    df_encoded = encoder.fit_transform(df)
+    X_train_encoded = encoder.fit_transform(X_train)
+    X_valid_encoded = encoder.transform(X_valid)
+    X_test_encoded = encoder.transform(X_test)
     
-    return df_encoded
+    X_train_encoded.drop(columns=['zipcode_0'])
+    X_valid_encoded.drop(columns=['zipcode_0'])
+    X_test_encoded.drop(columns=['zipcode_0'])
+    
+    return X_train_encoded, X_valid_encoded, X_test_encoded
 
 
 def get_values_for_replacement(column, method='5-95perc'):
@@ -102,19 +130,66 @@ def create_recon_age_col(df):
     df['recon_age'] = df[['yr_renovated', 'yr_built', 'date']].apply(lambda x: calc_recon_age(x['yr_renovated'], x['yr_built'], x['date'].year), axis=1)
     
     return df['recon_age']
+
+
+def feature_filter(X_train, y_train, threshold):
     
+    df = X_train.copy()
+    df['price'] = y_train
+    correlation = df.corr()
+
+    cor_target = abs(correlation["price"])
+    relevant_features = cor_target[(cor_target > threshold) & (cor_target < 1.0)]
+    features = relevant_features.index
+    
+    return features
+
+
+def feature_wrapper(X_train, y_train):
+    
+    cols = list(X_train.columns)
+    cols.remove('date')
+    pmax = 1
+    while (len(cols)>0):
+
+        X_1 = X_train[cols]
+        X_1 = sm.add_constant(X_1)
+        model = sm.OLS(y_train,X_1.astype(float)).fit()
+        p = pd.Series(model.pvalues.values[1:],index = cols)
+        pmax = max(p)
+        feature_with_p_max = p.idxmax()
+        if(pmax>0.05):
+            cols.remove(feature_with_p_max)
+        else:
+            break
+
+    return cols
+
+
+def select_features(X_train, y_train, model_func, k = 10, forward = True, floating = False, scoring = 'r2', cv = 0):
+    sfs = SFS(model_func(), k_features=k, forward=forward, floating=floating, scoring = scoring, cv = cv)
+    cols = list(X_train.columns)
+    cols.remove('date')
+    sfs.fit(X_train[cols], y_train)
+    features = list(sfs.k_feature_names_)
+    
+    return features
 
 def run_pipeline(df):
     
     df = replace_bedrooms_number(33, 3, df)
     df = remove_rows(df)
     df['recon_age'] = create_recon_age_col(df)
-    df = encode_zipcode(df)
     
     X_train, X_valid, X_test, y_train, y_valid, y_test = split_data(df)
     
     #normalize price
     y_train, y_valid, y_test, price_lambda = boxcox_normalize(y_train, y_valid, y_test)
+    
+    #create price per sqft column
+    X_train, X_valid, X_test = create_price_per_sqft_column(X_train, X_valid, X_test, y_train)
+    
+    X_train, X_valid, X_test = encode_zipcode(X_train, X_valid, X_test)
     
     #normalize sqft_living
     normalized = boxcox_normalize(X_train['sqft_living'], X_valid['sqft_living'], X_test['sqft_living'])
