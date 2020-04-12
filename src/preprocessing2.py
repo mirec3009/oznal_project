@@ -5,8 +5,6 @@ import scipy.stats as stats
 from dateutil.parser import parse
 from sklearn.model_selection import train_test_split
 from src.analysis import get_whiskers, calc_recon_age
-import statsmodels.api as sm
-from mlxtend.feature_selection import SequentialFeatureSelector as SFS
 
 
 def create_price_per_sqft_column(X_train, X_valid, X_test, y_train):
@@ -124,6 +122,12 @@ def remove_rows(df):
     return df
 
 
+def remove_col(df, col_list):
+    df = df.drop(columns=col_list)
+    
+    return df
+
+
 def create_recon_age_col(df):
     df["date"] = df["date"].apply(lambda x: parse(x, dayfirst=False))
     df["date"] = pd.to_datetime(df["date"], infer_datetime_format=True)
@@ -132,56 +136,17 @@ def create_recon_age_col(df):
     return df['recon_age']
 
 
-def feature_filter(X_train, y_train, threshold):
-    
-    df = X_train.copy()
-    df['price'] = y_train
-    correlation = df.corr()
-
-    cor_target = abs(correlation["price"])
-    relevant_features = cor_target[(cor_target > threshold) & (cor_target < 1.0)]
-    features = relevant_features.index
-    
-    return features
-
-
-def feature_wrapper(X_train, y_train):
-    
-    cols = list(X_train.columns)
-    cols.remove('date')
-    pmax = 1
-    while (len(cols)>0):
-
-        X_1 = X_train[cols]
-        X_1 = sm.add_constant(X_1)
-        model = sm.OLS(y_train,X_1.astype(float)).fit()
-        p = pd.Series(model.pvalues.values[1:],index = cols)
-        pmax = max(p)
-        feature_with_p_max = p.idxmax()
-        if(pmax>0.05):
-            cols.remove(feature_with_p_max)
-        else:
-            break
-
-    return cols
-
-
-def select_features(X_train, y_train, model_func, k = 10, forward = True, floating = False, scoring = 'r2', cv = 0):
-    sfs = SFS(model_func(), k_features=k, forward=forward, floating=floating, scoring = scoring, cv = cv)
-    cols = list(X_train.columns)
-    cols.remove('date')
-    sfs.fit(X_train[cols], y_train)
-    features = list(sfs.k_feature_names_)
-    
-    return features
-
 def run_pipeline(df):
-    
     df = replace_bedrooms_number(33, 3, df)
     df = remove_rows(df)
     df['recon_age'] = create_recon_age_col(df)
     
+    # split data in ratio 70:20:10
     X_train, X_valid, X_test, y_train, y_valid, y_test = split_data(df)
+    
+    X_train = remove_col(X_train, ['date'])
+    X_valid = remove_col(X_valid, ['date'])
+    X_test = remove_col(X_test, ['date'])
     
     #normalize price
     y_train, y_valid, y_test, price_lambda = boxcox_normalize(y_train, y_valid, y_test)
