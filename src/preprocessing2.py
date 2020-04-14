@@ -45,9 +45,9 @@ def encode_zipcode(X_train, X_valid, X_test):
     X_valid_encoded = encoder.transform(X_valid)
     X_test_encoded = encoder.transform(X_test)
     
-    X_train_encoded.drop(columns=['zipcode_0'])
-    X_valid_encoded.drop(columns=['zipcode_0'])
-    X_test_encoded.drop(columns=['zipcode_0'])
+    X_train_encoded.drop(columns=['zipcode_0'], inplace=True)
+    X_valid_encoded.drop(columns=['zipcode_0'], inplace=True)
+    X_test_encoded.drop(columns=['zipcode_0'], inplace=True)
     
     return X_train_encoded, X_valid_encoded, X_test_encoded
 
@@ -144,6 +144,7 @@ def run_pipeline(df):
     # split data in ratio 70:20:10
     X_train, X_valid, X_test, y_train, y_valid, y_test = split_data(df)
     
+    #remove date column
     X_train = remove_col(X_train, ['date'])
     X_valid = remove_col(X_valid, ['date'])
     X_test = remove_col(X_test, ['date'])
@@ -175,10 +176,16 @@ def run_pipeline(df):
     X_test['sqft_above'] = normalized[2]
     
     #normalize sqft_basement
-    X_train['sqft_basement'], X_valid['sqft_basement'], X_test['sqft_basement'] = normalize(np.sqrt, X_train['sqft_basement'], X_valid['sqft_basement'], X_test['sqft_basement'], repl_method='mean')
+    normalized = normalize(np.sqrt, X_train['sqft_basement'], X_valid['sqft_basement'], X_test['sqft_basement'], repl_method='mean')
+    X_train['sqft_basement'] = normalized[0]
+    X_valid['sqft_basement'] = normalized[1]
+    X_test['sqft_basement'] = normalized[2]
     
     #normalize sqft_living15
-    X_train['sqft_living15'], X_valid['sqft_living15'], X_test['sqft_living15'] = normalize(np.log, X_train['sqft_living15'], X_valid['sqft_living15'], X_test['sqft_living15'])
+    normalized = normalize(np.log, X_train['sqft_living15'], X_valid['sqft_living15'], X_test['sqft_living15'])
+    X_train['sqft_living15'] = normalized[0]
+    X_valid['sqft_living15'] = normalized[1]
+    X_test['sqft_living15'] = normalized[2]
     
     #normalize sqft_lot15
     normalized = boxcox_normalize(X_train['sqft_lot15'], X_valid['sqft_lot15'], X_test['sqft_lot15'], repl_method='med')
