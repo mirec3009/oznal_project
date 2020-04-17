@@ -7,6 +7,10 @@ from mlxtend.feature_selection import SequentialFeatureSelector as SFS
 
 
 def check_correlations(df, threshold):
+    """
+    Step 1: select columns with correlation koeficient value which is above threshold.
+    Step 2: select only those columns which do not correlate with each other (if so, choose only one)
+    """
     col_corr = set()
     corr_matrix = df.corr()
     
@@ -56,6 +60,7 @@ def feature_wrapper(X_train, y_train):
 
 
 def select_features_SFS(X_train, y_train, model_func, k = 10, forward = True, floating = False, scoring = 'r2', cv = 0):
+    # selects features with Sequential Feature Selector
     sfs = SFS(model_func(), k_features=k, forward=forward, floating=floating, scoring = scoring, cv = cv)
     cols = list(X_train.columns)
     sfs.fit(X_train[cols], y_train)
@@ -65,7 +70,7 @@ def select_features_SFS(X_train, y_train, model_func, k = 10, forward = True, fl
 
 
 def select_features_RFE(X_train, X_test, y_train, y_test):
-           
+    # selects features with Recursion Forward Elimination algorithm
     high_score=0
     nof=0           
     score_list =[]

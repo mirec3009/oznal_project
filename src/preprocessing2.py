@@ -8,18 +8,25 @@ from src.analysis import get_whiskers, calc_recon_age
 
 
 def create_price_per_sqft_column(X_train, X_valid, X_test, y_train):
+    #fit_transform part on train
     X_train['price_per_sqft'] = y_train / (X_train['sqft_living'] + X_train['sqft_basement'])
+    # default median for missing zipcode values in valid/test
     median = X_train['price_per_sqft'].median()
+    #for each zipcode get median of price_per_sqft
     X_train['price_per_sqft'] = X_train.groupby('zipcode')['price_per_sqft'].transform(lambda x: x.median())
     
+    # transform part on vald/test
+    #creates dictionary with median for each zipcode value in train
     d = {}
     for _, x_train in X_train.iterrows():
         d.update({x_train['zipcode']:x_train['price_per_sqft']})
-        
+    
+    #based on train dictionary, choose correct price_per_sqft (determined by zipcode value), new zipcode values has default median
     X_valid['price_per_sqft'] = median
     for indice, x_valid in X_valid.iterrows():
         X_valid.loc[X_valid.index == indice ,'price_per_sqft'] = d[x_valid['zipcode']]
-        
+    
+    #based on train dictionary, choose correct price_per_sqft (determined by zipcode value), new zipcode values has default median
     X_test['price_per_sqft'] = median
     for indice, x_test in X_test.iterrows():
         X_test.loc[X_test.index == indice ,'price_per_sqft'] = d[x_test['zipcode']]    
@@ -137,11 +144,16 @@ def create_recon_age_col(df):
 
 
 def run_pipeline(df):
+    # replace outlying number of bedrooms (33)
     df = replace_bedrooms_number(33, 3, df)
+    
+    #remove rows which have 0 bedrooms and 0.0 bathrooms
     df = remove_rows(df)
+    
+    #create new column recon_age, which describes number of years from last reconstruction till year of sale(if no reconstruction was made, then the number of years from year of building to year of sale)
     df['recon_age'] = create_recon_age_col(df)
     
-    # split data in ratio 70:20:10
+    # sort data by date of sale, then split in ratio 70:20:10
     X_train, X_valid, X_test, y_train, y_valid, y_test = split_data(df)
     
     #remove date column
@@ -149,45 +161,46 @@ def run_pipeline(df):
     X_valid = remove_col(X_valid, ['date'])
     X_test = remove_col(X_test, ['date'])
     
-    #normalize price
+    #normalize price with boxcox, replace outliers with 5-95 percentile
     y_train, y_valid, y_test, price_lambda = boxcox_normalize(y_train, y_valid, y_test)
     
-    #create price per sqft column
+    #create new column price_per_sqft, which describes ratio of price column and sum of sqft_living with sqft_basement
     X_train, X_valid, X_test = create_price_per_sqft_column(X_train, X_valid, X_test, y_train)
     
+    #binary encoding for zipcode column
     X_train, X_valid, X_test = encode_zipcode(X_train, X_valid, X_test)
     
-    #normalize sqft_living
+    #normalize sqft_living with boxcox, replace outliers with 5-95 percentile
     normalized = boxcox_normalize(X_train['sqft_living'], X_valid['sqft_living'], X_test['sqft_living'])
     X_train['sqft_living'] = normalized[0]
     X_valid['sqft_living'] = normalized[1]
     X_test['sqft_living'] = normalized[2]
     
-    #normalize sqft_lot
+    #normalize sqft_lot with boxcox, replace outliers with median
     normalized = boxcox_normalize(X_train['sqft_lot'], X_valid['sqft_lot'], X_test['sqft_lot'], repl_method='med')
     X_train['sqft_lot'] = normalized[0]
     X_valid['sqft_lot'] = normalized[1]
     X_test['sqft_lot'] = normalized[2]
     
-    #normalize sqft_above
+    #normalize sqft_above with boxcox, replace outliers with 5-95 percentile
     normalized = boxcox_normalize(X_train['sqft_above'], X_valid['sqft_above'], X_test['sqft_above'])
     X_train['sqft_above'] = normalized[0]
     X_valid['sqft_above'] = normalized[1]
     X_test['sqft_above'] = normalized[2]
     
-    #normalize sqft_basement
+    #normalize sqft_basement with boxcox, replace outliers with mean
     normalized = normalize(np.sqrt, X_train['sqft_basement'], X_valid['sqft_basement'], X_test['sqft_basement'], repl_method='mean')
     X_train['sqft_basement'] = normalized[0]
     X_valid['sqft_basement'] = normalized[1]
     X_test['sqft_basement'] = normalized[2]
     
-    #normalize sqft_living15
+    #normalize sqft_living15 with log naturalis, replace with 5-95 percentile
     normalized = normalize(np.log, X_train['sqft_living15'], X_valid['sqft_living15'], X_test['sqft_living15'])
     X_train['sqft_living15'] = normalized[0]
     X_valid['sqft_living15'] = normalized[1]
     X_test['sqft_living15'] = normalized[2]
     
-    #normalize sqft_lot15
+    #normalize sqft_lot15 with boxcox, replace outliers with median
     normalized = boxcox_normalize(X_train['sqft_lot15'], X_valid['sqft_lot15'], X_test['sqft_lot15'], repl_method='med')
     X_train['sqft_lot15'] = normalized[0]
     X_valid['sqft_lot15'] = normalized[1]
