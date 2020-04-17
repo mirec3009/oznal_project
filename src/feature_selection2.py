@@ -7,10 +7,6 @@ from mlxtend.feature_selection import SequentialFeatureSelector as SFS
 
 
 def check_correlations(df, threshold):
-    """
-    Step 1: select columns with correlation koeficient value which is above threshold.
-    Step 2: select only those columns which do not correlate with each other (if so, choose only one)
-    """
     col_corr = set()
     corr_matrix = df.corr()
     
@@ -26,7 +22,10 @@ def check_correlations(df, threshold):
 
 
 def feature_filter(X_train, y_train, threshold):
-    
+    """
+    Step 1: select columns with correlation koeficient value which is above threshold.
+    Step 2: select only those columns which do not correlate with each other (if so, choose only one)
+    """
     df = X_train.copy()
     df['price'] = y_train
     correlation = df.corr()
