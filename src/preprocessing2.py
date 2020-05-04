@@ -3,6 +3,7 @@ import numpy as np
 import category_encoders as ce
 import scipy.stats as stats
 from dateutil.parser import parse
+from collections import defaultdict 
 from sklearn.model_selection import train_test_split
 from src.analysis import get_whiskers, calc_recon_age
 
@@ -17,9 +18,10 @@ def create_price_per_sqft_column(X_train, X_valid, X_test, y_train):
     
     # transform part on vald/test
     #creates dictionary with median for each zipcode value in train
-    d = {}
+    d = defaultdict(lambda: median)
     for _, x_train in X_train.iterrows():
         d.update({x_train['zipcode']:x_train['price_per_sqft']})
+    
     
     #based on train dictionary, choose correct price_per_sqft (determined by zipcode value), new zipcode values has default median
     X_valid['price_per_sqft'] = median
@@ -67,6 +69,8 @@ def get_values_for_replacement(column, method='5-95perc'):
         value1 = value2 = column.mean()
     elif method == 'med':
         value1 = value2 = column.median()
+    elif method == 'whiskers':
+        value1, value2 = get_whiskers(column)
         
     return value1, value2
 
